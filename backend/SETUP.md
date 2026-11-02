@@ -34,8 +34,9 @@ const BACKEND_URL = 'https://script.google.com/macros/s/XXXX/exec';
 (or send the URL to Claude and it'll make the change).
 
 ## Updating the script later
-Edit the code, then **Deploy → Manage deployments → ✏️ → Version: New version → Deploy**.
-The URL stays the same.
+The website and the script are separate. Changing `index.html` never requires touching the script.
+Only if `Code.gs` itself changes: **Deploy → Manage deployments → ✏️ (edit) → Version: New version → Deploy**.
+That keeps the same URL. Don't use **New deployment** again, because that makes a new URL.
 
 ## Notes
 - Emails come from the Google account that deployed the script, with Reply-To set to the customer.
