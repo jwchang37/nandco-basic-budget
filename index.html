@@ -1690,38 +1690,32 @@ function scopeMultiplier(cat) {
 }
 
 // ── Project-type follow-ups ──
-// New Construction (tier A): stories sets the foundation footprint (two story = half the sqft).
+// New Construction (tier A): two story multiplies foundation + framing by TWO_STORY_MULT.
 // Remodel (tier C): addition sqft is added to the house size and gets its own foundation + framing.
 let projectStories = 1;
+const TWO_STORY_MULT = 1.2; // two-story New Construction: foundation + framing cost multiplier
 let additionSqft = 0;
 
 function activeAdditionSqft() { return currentTier === 'C' ? additionSqft : 0; }
 
-function structureCategory(sqft) {
-  // sqft here already includes any active addition
+// Remodel addition: its own foundation + framing at the Remodel (C) rates.
+// (New Construction instead turns the regular Foundation/Framing rows on — see setNewConstructionScope.)
+function additionCategory() {
   const add = activeAdditionSqft();
-  const footprint = Math.round(sqft / projectStories);
-  const items = [
-    { id:'struct_found', desc:'Foundation', sub:'',
-      qty: null, uomLabel:'lump', rateKey:'struct_found',
-      _totals: { A: getRate('found_a','A') * footprint, B: 0, C: getRate('found_a','C') * add } },
-    { id:'struct_frame', desc:'Structural framing', sub:'',
-      qty: null, uomLabel:'lump', rateKey:'struct_frame',
-      _totals: { A: getRate('frame','A') * (sqft - add), B: 0, C: getRate('frame','C') * add } },
-  ];
-  if (currentTier === 'A') {
-    items[0].desc = `Foundation — ${footprint.toLocaleString()} sqft footprint (${projectStories === 2 ? 'two story' : 'single story'})`;
-    items[1].desc = `Structural framing — ${(sqft - add).toLocaleString()} sqft`;
-  } else if (currentTier === 'C') {
-    items[0].desc = `Addition foundation — ${add.toLocaleString()} sqft`;
-    items[1].desc = `Addition framing — ${add.toLocaleString()} sqft`;
-  }
-  return { cat: 'Structure — New Build / Addition', scopeable: false, isMaterial: false, items };
+  if (add <= 0) return [];
+  return [{ cat: 'Structure — Addition', scopeable: false, isMaterial: false, items: [
+    { id:'add_found', desc:`Addition foundation — ${add.toLocaleString()} sqft`, sub:'', qty: null, uomLabel:'lump', rateKey:'add_found',
+      _totals: { A: 0, B: 0, C: getRate('found_a','C') * add } },
+    { id:'add_frame', desc:`Addition framing — ${add.toLocaleString()} sqft`, sub:'', qty: null, uomLabel:'lump', rateKey:'add_frame',
+      _totals: { A: 0, B: 0, C: getRate('frame','C') * add } },
+  ]}];
 }
 
 function renoData(sqft, beds, baths) {
   sqft = sqft + activeAdditionSqft();
-  const structure = structureCategory(sqft);
+  // New Construction, two story: foundation and framing cost 1.2× (applied in itemTotal via _mult)
+  const storyMult = (currentTier === 'A' && projectStories === 2) ? TWO_STORY_MULT : 1;
+  const storyNote = storyMult !== 1 ? ` — two story ×${TWO_STORY_MULT}` : '';
   const extraBaths = Math.max(0, baths - 1);
   const windows    = Math.max(4, Math.round(sqft / 180));
   const closets    = beds;
@@ -1744,12 +1738,12 @@ function renoData(sqft, beds, baths) {
       { id:'demo',      desc:'General demo per plan',          sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'demo'      },
     ]},
     { cat: 'Foundation', scopeable: true, isMaterial: false, items: [
-      { id:'found_a',   desc:'Architectural & structural',     sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'found_a'   },
+      { id:'found_a',   desc:'Architectural & structural' + storyNote, sub:'Labor/Mat', qty: sqft, uomLabel:'sqft', rateKey:'found_a', _mult: storyMult },
     ]},
     { cat: 'Framing', scopeable: true, isMaterial: false, items: [
-      { id:'frame',     desc:'Structural framing per plan',    sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'frame'     },
+      { id:'frame',     desc:'Structural framing per plan' + storyNote, sub:'Labor/Mat', qty: sqft, uomLabel:'sqft', rateKey:'frame', _mult: storyMult },
     ]},
-    structure,
+    ...additionCategory(),
     { cat: 'Mechanical', scopeable: true, isMaterial: false, items: [
       { id:'mech_bath', desc:'Bathroom exhaust fans',          sub:`${baths} baths`,           qty: baths,       uomLabel:'each',       rateKey:'mech_bath' },
       { id:'mech_kit',  desc:'Kitchen range exhaust vent',     sub:'',                         qty: 1,           uomLabel:'each',       rateKey:'mech_kit'  },
@@ -1996,7 +1990,7 @@ function itemTotal(item, tier) {
     qty = (item._guestQty) * guestBathCount;
   }
   const base = qty === null ? rate : qty * rate;
-  return base * adminMultiplier;
+  return base * (item._mult || 1) * adminMultiplier;
 }
 
 let currentTier = 'B';
@@ -2517,7 +2511,18 @@ function syncTierClass() {
   document.body.classList.remove('tier-A', 'tier-B', 'tier-C');
   document.body.classList.add('tier-' + currentTier);
 }
-document.querySelectorAll('.tier-btn').forEach(btn => btn.addEventListener('click', syncTierClass));
+// New Construction switches to whole-home scope with every row at full; leaving it restores the defaults.
+let prevTier = currentTier;
+function onProjectTypeChange() {
+  syncTierClass();
+  if (currentTier === 'A' || prevTier === 'A') {
+    isFull = true;
+    activeRooms.clear();
+    applyRoomPresets(); // re-renders
+  }
+  prevTier = currentTier;
+}
+document.querySelectorAll('.tier-btn').forEach(btn => btn.addEventListener('click', onProjectTypeChange));
 document.querySelectorAll('.seg-btn[data-stories]').forEach(btn => {
   btn.addEventListener('click', () => {
     projectStories = parseInt(btn.dataset.stories, 10);
@@ -2634,6 +2639,8 @@ function applyRoomPresets() {
     });
   } else if (isFull) {
     Object.assign(scopeState, PRESETS.full.scope);
+    // New Construction: every scope row starts at full
+    if (currentTier === 'A') SCOPEABLE.forEach(c => { scopeState[c] = 'full'; });
   }
 
   // Update button active states
