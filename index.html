@@ -1690,9 +1690,10 @@ function scopeMultiplier(cat) {
 }
 
 // ── Project-type follow-ups ──
-// New Construction (tier A): stories sets the foundation footprint (two story = half the sqft).
+// New Construction (tier A): two story multiplies foundation + framing by TWO_STORY_MULT.
 // Remodel (tier C): addition sqft is added to the house size and gets its own foundation + framing.
 let projectStories = 1;
+const TWO_STORY_MULT = 1.2; // two-story New Construction: foundation + framing cost multiplier
 let additionSqft = 0;
 
 function activeAdditionSqft() { return currentTier === 'C' ? additionSqft : 0; }
@@ -1712,8 +1713,9 @@ function additionCategory() {
 
 function renoData(sqft, beds, baths) {
   sqft = sqft + activeAdditionSqft();
-  // New Construction: foundation covers the footprint (two story = half the sqft)
-  const footprint = currentTier === 'A' ? Math.round(sqft / projectStories) : sqft;
+  // New Construction, two story: foundation and framing cost 1.2× (applied in itemTotal via _mult)
+  const storyMult = (currentTier === 'A' && projectStories === 2) ? TWO_STORY_MULT : 1;
+  const storyNote = storyMult !== 1 ? ` — two story ×${TWO_STORY_MULT}` : '';
   const extraBaths = Math.max(0, baths - 1);
   const windows    = Math.max(4, Math.round(sqft / 180));
   const closets    = beds;
@@ -1736,10 +1738,10 @@ function renoData(sqft, beds, baths) {
       { id:'demo',      desc:'General demo per plan',          sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'demo'      },
     ]},
     { cat: 'Foundation', scopeable: true, isMaterial: false, items: [
-      { id:'found_a',   desc: currentTier === 'A' ? `Architectural & structural — ${projectStories === 2 ? 'two story' : 'single story'} footprint` : 'Architectural & structural', sub:'Labor/Mat', qty: footprint, uomLabel:'sqft', rateKey:'found_a' },
+      { id:'found_a',   desc:'Architectural & structural' + storyNote, sub:'Labor/Mat', qty: sqft, uomLabel:'sqft', rateKey:'found_a', _mult: storyMult },
     ]},
     { cat: 'Framing', scopeable: true, isMaterial: false, items: [
-      { id:'frame',     desc:'Structural framing per plan',    sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'frame'     },
+      { id:'frame',     desc:'Structural framing per plan' + storyNote, sub:'Labor/Mat', qty: sqft, uomLabel:'sqft', rateKey:'frame', _mult: storyMult },
     ]},
     ...additionCategory(),
     { cat: 'Mechanical', scopeable: true, isMaterial: false, items: [
@@ -1988,7 +1990,7 @@ function itemTotal(item, tier) {
     qty = (item._guestQty) * guestBathCount;
   }
   const base = qty === null ? rate : qty * rate;
-  return base * adminMultiplier;
+  return base * (item._mult || 1) * adminMultiplier;
 }
 
 let currentTier = 'B';
