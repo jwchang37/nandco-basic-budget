@@ -686,8 +686,8 @@
   body.mode-basic .adv-only, body.mode-basic .adv-only-flex { display: none !important; }
   body.mode-advanced #basic-view-card { display: none; }
 
-  .addr-links { display: flex; gap: 6px; margin-top: 6px; }
-  .addr-link-btn { flex: 1; background: var(--surface2); color: var(--text2); border: 0.5px solid var(--border2); border-radius: 5px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 7px 4px; cursor: pointer; transition: all 0.15s; }
+  .addr-links { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .addr-link-btn { height: 30px; background: var(--surface2); color: var(--text2); border: 0.5px solid var(--border2); border-radius: 5px; font-family: var(--font-body); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; cursor: pointer; transition: all 0.15s; }
   .addr-link-btn:hover { border-color: var(--accent); color: var(--accent); }
   .addr-hint { font-size: 10px; color: var(--text3); margin-top: 6px; line-height: 1.4; }
 
@@ -1145,10 +1145,10 @@
           <div class="input-label"><span>Address <span style="color:var(--text3);">(optional)</span></span></div>
           <input type="text" id="prop-address" placeholder="e.g. 1515 W 207th St, Torrance CA" autocomplete="street-address">
           <div class="addr-links">
-            <button type="button" class="addr-link-btn" data-site="zillow">Find on Zillow ↗</button>
-            <button type="button" class="addr-link-btn" data-site="google">Search Google ↗</button>
+            <button type="button" class="addr-link-btn" data-site="zillow">Zillow ↗</button>
+            <button type="button" class="addr-link-btn" data-site="google">Google ↗</button>
           </div>
-          <div class="addr-hint">Opens a search in a new tab. Copy the square footage, bedrooms and bathrooms into the fields below.</div>
+          <div class="addr-hint">Look it up, then enter sqft, beds and baths below.</div>
         </div>
         <div class="input-group">
           <div class="input-label">
