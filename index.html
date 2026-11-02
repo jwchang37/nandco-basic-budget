@@ -678,6 +678,14 @@
   .btc-meta { font-size: 13px; color: var(--text2); margin-top: 10px; }
   .btc-note { font-size: 11px; color: var(--text3); margin-top: 14px; line-height: 1.5; max-width: 520px; }
 
+  .view-mode-row { display: flex; justify-content: flex-end; }
+  .view-mode-toggle { display: inline-flex; border: 0.5px solid var(--border2); border-radius: 6px; overflow: hidden; }
+  .view-mode-btn { background: var(--surface2); color: var(--text3); border: none; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 7px 14px; cursor: pointer; transition: all 0.15s; }
+  .view-mode-btn + .view-mode-btn { border-left: 0.5px solid var(--border2); }
+  .view-mode-btn.active { background: var(--accent); color: #1a1800; }
+  body.mode-basic .adv-only, body.mode-basic .adv-only-flex { display: none !important; }
+  body.mode-advanced #basic-view-card { display: none; }
+
   /* reno summary card */
   .reno-totals {
     display: grid;
@@ -1086,7 +1094,7 @@
   [data-theme="dark"] .cat-on-off button.pill-off.active { background: rgba(192,57,43,0.15); border-color: #c0392b; color: #e07070; }
 </style>
 </head>
-<body>
+<body class="mode-basic">
 
 <!-- ═══════════ HEADER ═══════════ -->
 <header>
@@ -1233,19 +1241,24 @@
     <!-- RENO CONTENT -->
     <div class="reno-content">
 
+      <!-- Basic / Advanced view switch -->
+      <div class="view-mode-row">
+        <div class="view-mode-toggle" role="group" aria-label="View mode">
+          <button class="view-mode-btn active" data-mode="basic">Basic</button>
+          <button class="view-mode-btn" data-mode="advanced">Advanced</button>
+        </div>
+      </div>
+
       <!-- Basic customer view: single lump-sum estimate -->
-      <div class="basic-total-card">
+      <div class="basic-total-card" id="basic-view-card">
         <div class="btc-label">Your estimated renovation cost</div>
         <div class="btc-val" id="basic-total">—</div>
         <div class="btc-meta" id="basic-meta">—</div>
-        <div class="btc-note">All-in estimate covering labor, materials and project management. Final pricing depends on site conditions and the selections you make.</div>
+        <div class="btc-note" id="basic-note">All-in estimate covering labor and materials, with NANDCO's 15% GC fee included. Final pricing depends on site conditions and the selections you make.</div>
       </div>
 
-      <!-- Detailed breakdown (kept for pricing logic, hidden in the basic customer view) -->
-      <div id="detail-view" style="display:none;">
-
-      <!-- Totals row -->
-      <div class="reno-totals">
+      <!-- Totals row (advanced view) -->
+      <div class="reno-totals adv-only">
         <div class="reno-total-card">
           <div class="rtc-label">Base Labor</div>
           <div class="rtc-val" id="rtc-labor">—</div>
@@ -1283,7 +1296,7 @@
             <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:rgba(143,168,110,0.25);border:0.5px solid var(--accent2);border-radius:2px;"></span>FULL</span>
             <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:rgba(212,129,58,0.2);border:0.5px solid #d4813a;border-radius:2px;"></span>RENO ½</span>
             <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:rgba(192,57,43,0.12);border:0.5px solid #c0392b;border-radius:2px;"></span>OMIT</span>
-            <span style="display:flex;align-items:center;gap:6px;margin-left:4px;padding-left:12px;border-left:0.5px solid var(--border);">
+            <span class="adv-only-flex" style="display:flex;align-items:center;gap:6px;margin-left:4px;padding-left:12px;border-left:0.5px solid var(--border);">
               <span style="color:var(--text3);">ALL TIERS</span>
               <div id="compare-showall-toggle" style="width:28px;height:16px;border-radius:8px;background:var(--surface3);border:0.5px solid var(--border2);position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;">
                 <div id="compare-showall-knob" style="position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--text3);transition:left 0.2s,background 0.2s;"></div>
@@ -1305,13 +1318,11 @@
         </table>
       </div>
 
-      <!-- Category breakdown accordion -->
-      <div>
+      <!-- Category breakdown accordion (advanced view) -->
+      <div class="adv-only">
         <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Line-item breakdown — <span id="breakdown-tier-label">Tier A</span></div>
         <div id="reno-categories" style="display:flex;flex-direction:column;gap:8px;"></div>
       </div>
-
-      </div><!-- /detail-view -->
 
     </div>
   </div>
@@ -2351,6 +2362,7 @@ function getCatTotal(cat, tier) {
 
 // Customer-facing names for the three pricing tiers
 const BASIC_OPTION_NAMES = { A: 'Luxury Remodel', B: 'Home Upgrade', C: 'Rental or Flip Refresh' };
+let viewMode = 'basic'; // 'basic' | 'advanced' — see setViewMode()
 
 function basicScopeLabel() {
   if (isFull || activeRooms.size === 0) return 'Full renovation';
@@ -2382,6 +2394,8 @@ function renderReno() {
   document.getElementById('rtc-gcfee-pct').textContent = nandcoFeePct + '% GC fee';
   document.getElementById('rtc-project-total').textContent = fmtReno(projectTotal);
   document.getElementById('basic-total').textContent = fmtReno(projectTotal);
+  document.getElementById('basic-note').textContent =
+    'All-in estimate covering labor and materials, with NANDCO\'s ' + nandcoFeePct + '% GC fee included. Final pricing depends on site conditions and the selections you make.';
   document.getElementById('basic-meta').textContent =
     BASIC_OPTION_NAMES[tier] + ' · ' + basicScopeLabel() + ' · ' + sqft.toLocaleString() + ' sqft, ' + beds + ' bed / ' + baths + ' bath';
   document.getElementById('breakdown-tier-label').textContent = 'Tier ' + tier;
@@ -2640,7 +2654,7 @@ document.querySelectorAll('.tier-btn').forEach(btn => {
 });
 
 // Show-all toggle for compare table
-let compareShowAll = true;
+let compareShowAll = false; // basic view starts single-column; advanced turns this on
 
 function updateCompareTierVisibility() {
   const table = document.getElementById('compare-table');
@@ -2649,6 +2663,7 @@ function updateCompareTierVisibility() {
   const tierColors = { A: '', B: 'var(--accent2)', C: 'var(--danger-light)' };
   const thead = table.querySelector('thead tr');
   const thA = thead ? thead.querySelector('.col-a') : null;
+  if (viewMode === 'basic') tierLabels[currentTier] = BASIC_OPTION_NAMES[currentTier];
   if (compareShowAll) {
     table.classList.remove('single-tier');
     if (thA) { thA.textContent = 'A — Premium'; thA.style.color = ''; }
@@ -2666,6 +2681,22 @@ function updateCompareTierVisibility() {
     knob.style.background = compareShowAll ? 'var(--accent)' : 'var(--text3)';
   }
 }
+
+// ── Basic / Advanced view mode ──
+// Basic: lump-sum card + single-column comparison (selected option only).
+// Advanced: original cost cards, all-tier comparison toggle, line-item breakdown.
+function setViewMode(mode) {
+  viewMode = mode;
+  document.body.classList.toggle('mode-basic', mode === 'basic');
+  document.body.classList.toggle('mode-advanced', mode === 'advanced');
+  document.querySelectorAll('.view-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  compareShowAll = mode === 'advanced';
+  renderReno();
+}
+
+document.querySelectorAll('.view-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+});
 
 // compare toggle — click + touchend for iOS
 ;(function() {
@@ -3362,6 +3393,7 @@ function exportRenoReport() {
   const data  = renoData(sqft, beds, baths);
 
   const tierNames = { A: 'Premium', B: 'Standard', C: 'Budget' };
+  const isAdv = viewMode === 'advanced'; // advanced exports the full breakdown, basic a single figure
   const tierColors = { A: '#a08840', B: '#5e8a43', C: '#c0392b' };
   const tierColor = tierColors[tier];
 
@@ -3438,7 +3470,7 @@ function exportRenoReport() {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NANDCO Renovation Estimate — ${BASIC_OPTION_NAMES[tier]}</title>
+<title>${isAdv ? `NANDCO Reno Report — Tier ${tier}` : `NANDCO Renovation Estimate — ${BASIC_OPTION_NAMES[tier]}`}</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root { --r-font-body: 'DM Sans', 'Segoe UI', Arial, sans-serif; --r-font-mono: 'DM Mono', 'Segoe UI', monospace; }
@@ -3510,10 +3542,14 @@ function exportRenoReport() {
 <div class="report-header">
   <div>
     <img class="report-logo-img" src="${LOGO_LIGHT_SRC}" alt="NANDCO Construction">
-    <div class="report-title">Renovation Estimate</div>
+    <div class="report-title">${isAdv ? 'Renovation Budget Report' : 'Renovation Estimate'}</div>
     ${reportAddress ? `<div style="font-size:12px;color:#5c5a53;margin-top:5px;font-family:'DM Sans',Arial,sans-serif;">${reportAddress}</div>` : ''}
   </div>
-  <div class="tier-badge">${BASIC_OPTION_NAMES[tier]}</div>
+  ${isAdv ? `<div class="tier-badge">
+    <div style="font-size:9px;letter-spacing:0.1em;">TIER</div>
+    <span class="tier-letter">${tier}</span>
+    ${tierNames[tier]}
+  </div>` : `<div class="tier-badge">${BASIC_OPTION_NAMES[tier]}</div>`}
 </div>
 
 <div class="meta-grid">
@@ -3523,13 +3559,31 @@ function exportRenoReport() {
   <div class="meta-item"><label>Bathrooms</label><value>${baths} bath</value></div>
 </div>
 
-<div class="totals-summary">
+${isAdv ? `<div class="totals-summary">
+  <div class="totals-row">
+    <div>
+      <div class="totals-label">Total Renovation Cost</div>
+      <div style="font-size:9px;color:#9a9890;margin-top:3px;font-family:var(--r-font-body);">All enabled categories at ${scopeLabel('full').toLowerCase()} scope — Tier ${tier} ${tierNames[tier]}</div>
+    </div>
+    <div class="totals-val">${fmt(grandTotal)}</div>
+  </div>
+  <div class="totals-row">
+    <div class="totals-label">NANDCO GC Fee (${nandcoFeePct}%)</div>
+    <div class="totals-val">${fmt(gcFee)}</div>
+  </div>
+  <div class="totals-row totals-row-final">
+    <div class="totals-label">Total Project Cost</div>
+    <div class="totals-val">${fmt(projectTotal)}</div>
+  </div>
+</div>
+
+${catSections}` : `<div class="totals-summary">
   <div class="totals-row totals-row-final">
     <div class="totals-label">Estimated Renovation Cost</div>
     <div class="totals-val">${fmt(projectTotal)}</div>
   </div>
 </div>
-<div style="font-size:11px;color:#5c5a53;line-height:1.5;">All-in estimate covering labor, materials and project management. Final pricing depends on site conditions and the selections you make.</div>
+<div style="font-size:11px;color:#5c5a53;line-height:1.5;">All-in estimate covering labor and materials, with NANDCO's ${nandcoFeePct}% GC fee included. Final pricing depends on site conditions and the selections you make.</div>`}
 
 <div class="report-footer">
   <div class="note">
