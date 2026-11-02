@@ -686,6 +686,11 @@
   body.mode-basic .adv-only, body.mode-basic .adv-only-flex { display: none !important; }
   body.mode-advanced #basic-view-card { display: none; }
 
+  .addr-links { display: flex; gap: 6px; margin-top: 6px; }
+  .addr-link-btn { flex: 1; background: var(--surface2); color: var(--text2); border: 0.5px solid var(--border2); border-radius: 5px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 7px 4px; cursor: pointer; transition: all 0.15s; }
+  .addr-link-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .addr-hint { font-size: 10px; color: var(--text3); margin-top: 6px; line-height: 1.4; }
+
   /* reno summary card */
   .reno-totals {
     display: grid;
@@ -1136,6 +1141,15 @@
 
       <div>
         <div class="section-label">Property</div>
+        <div class="input-group">
+          <div class="input-label"><span>Address <span style="color:var(--text3);">(optional)</span></span></div>
+          <input type="text" id="prop-address" placeholder="e.g. 1515 W 207th St, Torrance CA" autocomplete="street-address">
+          <div class="addr-links">
+            <button type="button" class="addr-link-btn" data-site="zillow">Find on Zillow ↗</button>
+            <button type="button" class="addr-link-btn" data-site="google">Search Google ↗</button>
+          </div>
+          <div class="addr-hint">Opens a search in a new tab. Copy the square footage, bedrooms and bathrooms into the fields below.</div>
+        </div>
         <div class="input-group">
           <div class="input-label">
             <span>Square footage</span>
@@ -2400,6 +2414,23 @@ document.querySelectorAll('.view-mode-btn').forEach(btn => {
   btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
 });
 
+// ── Free address search links (no API key) ──
+// Opens a Zillow or Google search for the typed address; the customer copies sqft/beds/baths in.
+document.querySelectorAll('.addr-link-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const addrInp = document.getElementById('prop-address');
+    const addr = addrInp.value.trim();
+    if (!addr) { addrInp.focus(); return; }
+    const url = btn.dataset.site === 'zillow'
+      ? 'https://www.zillow.com/homes/' + encodeURIComponent(addr) + '_rb/'
+      : 'https://www.google.com/search?q=' + encodeURIComponent(addr + ' beds baths sqft');
+    window.open(url, '_blank', 'noopener');
+  });
+});
+document.getElementById('prop-address').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.querySelector('.addr-link-btn[data-site="zillow"]').click();
+});
+
 // compare toggle — click + touchend for iOS
 ;(function() {
   const tog = document.getElementById('compare-showall-toggle');
@@ -3078,8 +3109,7 @@ function exportRenoReport() {
   const tierColors = { A: '#a08840', B: '#5e8a43', C: '#c0392b' };
   const tierColor = tierColors[tier];
 
-  const normalizedAddr = document.getElementById('pill-addr')?.textContent?.trim();
-  const reportAddress = (normalizedAddr && normalizedAddr !== '—') ? normalizedAddr : '';
+  const reportAddress = document.getElementById('prop-address')?.value.trim() || '';
 
   const presetLabel = isFull
     ? 'Full Renovation'
@@ -3277,7 +3307,7 @@ ${catSections}` : `<div class="totals-summary">
 </body></html>`;
 
   // Build filename from address if available
-  const rawAddr = ''; // address lookup removed in the basic estimator
+  const rawAddr = document.getElementById('prop-address')?.value.trim() || '';
   const fileBase = rawAddr
     ? 'NANDCO_Estimate_' + rawAddr.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')
     : 'NANDCO_Renovation_Estimate';
