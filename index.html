@@ -691,6 +691,13 @@
   .addr-link-btn:hover { border-color: var(--accent); color: var(--accent); }
   .addr-hint { font-size: 10px; color: var(--text3); margin-top: 6px; line-height: 1.4; }
 
+  .followup { display: none; margin-top: 10px; padding: 10px 12px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--surface); }
+  body.tier-A #followup-A, body.tier-C #followup-C { display: block; }
+  .followup-q { font-size: 12px; color: var(--text); margin-bottom: 8px; }
+  .seg-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .seg-btn { height: 30px; background: var(--surface2); color: var(--text2); border: 0.5px solid var(--border2); border-radius: 5px; font-family: var(--font-body); font-size: 12px; white-space: nowrap; cursor: pointer; transition: all 0.15s; }
+  .seg-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,185,122,0.15); }
+
   /* reno summary card */
   .reno-totals {
     display: grid;
@@ -1102,7 +1109,7 @@
   [data-theme="dark"] .cat-on-off button.pill-off.active { background: rgba(192,57,43,0.15); border-color: #c0392b; color: #e07070; }
 </style>
 </head>
-<body class="mode-basic">
+<body class="mode-basic tier-B">
 
 <!-- ═══════════ HEADER ═══════════ -->
 <header>
@@ -1131,11 +1138,25 @@
     <aside class="reno-sidebar">
       <div>
         <div class="section-label">Your Project</div>
-        <div class="reno-question">What kind of renovation are you planning?</div>
+        <div class="reno-question">What kind of project are you planning?</div>
         <div class="tier-toggle tier-stack">
-          <button class="tier-btn" data-tier="A"><span class="opt-title">Luxury Remodel</span><span class="opt-sub">Top-of-the-line finishes and craftsmanship throughout</span></button>
-          <button class="tier-btn active-b" data-tier="B"><span class="opt-title">Home Upgrade</span><span class="opt-sub">Quality, stylish finishes for the home you live in</span></button>
-          <button class="tier-btn" data-tier="C"><span class="opt-title">Rental or Flip Refresh</span><span class="opt-sub">Durable, cost-smart updates that are ready to rent or sell</span></button>
+          <button class="tier-btn" data-tier="A"><span class="opt-title">New Construction</span><span class="opt-sub">Build a brand-new home from the ground up</span></button>
+          <button class="tier-btn active-b" data-tier="B"><span class="opt-title">Renovation</span><span class="opt-sub">Update and refresh the home you already have</span></button>
+          <button class="tier-btn" data-tier="C"><span class="opt-title">Remodel</span><span class="opt-sub">Rework your space, with the option to add square footage</span></button>
+        </div>
+        <!-- Secondary question: New Construction -->
+        <div class="followup" id="followup-A">
+          <div class="followup-q">How many stories?</div>
+          <div class="seg-toggle">
+            <button type="button" class="seg-btn active" data-stories="1">Single story</button>
+            <button type="button" class="seg-btn" data-stories="2">Two story</button>
+          </div>
+        </div>
+        <!-- Secondary question: Remodel -->
+        <div class="followup" id="followup-C">
+          <div class="followup-q">Adding square footage?</div>
+          <input type="number" id="addition-sqft" value="0" min="0" max="5000" step="50" placeholder="0">
+          <div class="addr-hint">New area, in sqft. Leave at 0 if you're not adding on.</div>
         </div>
         <div style="display:none;" id="reno-tier-desc">
           Standard quality — Level 4 drywall, quartz counters, standard appliances. Foundation/framing typically excluded.
@@ -1248,7 +1269,7 @@
 
       <!-- Basic customer view: single lump-sum estimate -->
       <div class="basic-total-card" id="basic-view-card">
-        <div class="btc-label">Your estimated renovation cost</div>
+        <div class="btc-label">Your estimated project cost</div>
         <div class="btc-val" id="basic-total">—</div>
         <div class="btc-meta" id="basic-meta">—</div>
         <div class="btc-note" id="basic-note">All-in estimate covering labor and materials, with NANDCO's 15% GC fee included. Final pricing depends on site conditions and the selections you make.</div>
@@ -1668,7 +1689,39 @@ function scopeMultiplier(cat) {
   return 1;
 }
 
+// ── Project-type follow-ups ──
+// New Construction (tier A): stories sets the foundation footprint (two story = half the sqft).
+// Remodel (tier C): addition sqft is added to the house size and gets its own foundation + framing.
+let projectStories = 1;
+let additionSqft = 0;
+
+function activeAdditionSqft() { return currentTier === 'C' ? additionSqft : 0; }
+
+function structureCategory(sqft) {
+  // sqft here already includes any active addition
+  const add = activeAdditionSqft();
+  const footprint = Math.round(sqft / projectStories);
+  const items = [
+    { id:'struct_found', desc:'Foundation', sub:'',
+      qty: null, uomLabel:'lump', rateKey:'struct_found',
+      _totals: { A: getRate('found_a','A') * footprint, B: 0, C: getRate('found_a','C') * add } },
+    { id:'struct_frame', desc:'Structural framing', sub:'',
+      qty: null, uomLabel:'lump', rateKey:'struct_frame',
+      _totals: { A: getRate('frame','A') * (sqft - add), B: 0, C: getRate('frame','C') * add } },
+  ];
+  if (currentTier === 'A') {
+    items[0].desc = `Foundation — ${footprint.toLocaleString()} sqft footprint (${projectStories === 2 ? 'two story' : 'single story'})`;
+    items[1].desc = `Structural framing — ${(sqft - add).toLocaleString()} sqft`;
+  } else if (currentTier === 'C') {
+    items[0].desc = `Addition foundation — ${add.toLocaleString()} sqft`;
+    items[1].desc = `Addition framing — ${add.toLocaleString()} sqft`;
+  }
+  return { cat: 'Structure — New Build / Addition', scopeable: false, isMaterial: false, items };
+}
+
 function renoData(sqft, beds, baths) {
+  sqft = sqft + activeAdditionSqft();
+  const structure = structureCategory(sqft);
   const extraBaths = Math.max(0, baths - 1);
   const windows    = Math.max(4, Math.round(sqft / 180));
   const closets    = beds;
@@ -1696,6 +1749,7 @@ function renoData(sqft, beds, baths) {
     { cat: 'Framing', scopeable: true, isMaterial: false, items: [
       { id:'frame',     desc:'Structural framing per plan',    sub:'Labor/Mat',                qty: sqft,        uomLabel:'sqft',       rateKey:'frame'     },
     ]},
+    structure,
     { cat: 'Mechanical', scopeable: true, isMaterial: false, items: [
       { id:'mech_bath', desc:'Bathroom exhaust fans',          sub:`${baths} baths`,           qty: baths,       uomLabel:'each',       rateKey:'mech_bath' },
       { id:'mech_kit',  desc:'Kitchen range exhaust vent',     sub:'',                         qty: 1,           uomLabel:'each',       rateKey:'mech_kit'  },
@@ -2037,6 +2091,11 @@ function getCatTotal(cat, tier) {
   const mult = scopeMultiplier(cat.cat);
   if (mult === 0) return 0;
 
+  // Structure (new build / addition) is driven by the project-type questions, not room presets
+  if (cat.cat.startsWith('Structure')) {
+    return cat.items.reduce((s, item) => s + itemTotal(item, tier), 0) * mult;
+  }
+
   // Full reno: all items, full pricing
   if (isFull) {
     return cat.items.reduce((s, item) => s + itemTotal(item, tier), 0) * mult;
@@ -2080,11 +2139,22 @@ function getCatTotal(cat, tier) {
 }
 
 // Customer-facing names for the three pricing tiers
-const BASIC_OPTION_NAMES = { A: 'Luxury Remodel', B: 'Home Upgrade', C: 'Rental or Flip Refresh' };
+const BASIC_OPTION_NAMES = { A: 'New Construction', B: 'Renovation', C: 'Remodel' };
 let viewMode = 'basic'; // 'basic' | 'advanced' — see setViewMode()
 
+function projectTypeLabel() {
+  if (currentTier === 'A') return BASIC_OPTION_NAMES.A + (projectStories === 2 ? ' (two story)' : ' (single story)');
+  if (currentTier === 'C' && additionSqft > 0) return BASIC_OPTION_NAMES.C + ' + addition';
+  return BASIC_OPTION_NAMES[currentTier];
+}
+
+function sqftLabel(sqft) {
+  const add = activeAdditionSqft();
+  return sqft.toLocaleString() + ' sqft' + (add > 0 ? ' + ' + add.toLocaleString() + ' sqft addition' : '');
+}
+
 function basicScopeLabel() {
-  if (isFull || activeRooms.size === 0) return 'Full renovation';
+  if (isFull || activeRooms.size === 0) return 'Whole home';
   return [...activeRooms].map(k => ({ kitchen:'Kitchen','master-bath':'Master bath','guest-bath':'Guest bath' }[k])).join(' + ')
     + (activeRooms.has('guest-bath') && guestBathCount > 1 ? ` (×${guestBathCount})` : '');
 }
@@ -2119,7 +2189,7 @@ function renderReno() {
   document.getElementById('basic-note').textContent =
     'All-in estimate covering labor and materials, with NANDCO\'s ' + nandcoFeePct + '% GC fee included. Final pricing depends on site conditions and the selections you make.';
   document.getElementById('basic-meta').textContent =
-    BASIC_OPTION_NAMES[tier] + ' · ' + basicScopeLabel() + ' · ' + sqft.toLocaleString() + ' sqft, ' + beds + ' bed / ' + baths + ' bath';
+    projectTypeLabel() + ' · ' + basicScopeLabel() + ' · ' + sqftLabel(sqft) + ', ' + beds + ' bed / ' + baths + ' bath';
   document.getElementById('breakdown-tier-label').textContent = 'Tier ' + tier;
 
   const badge = document.getElementById('reno-tier-badge');
@@ -2440,6 +2510,24 @@ document.querySelectorAll('.addr-link-btn').forEach(btn => {
 });
 document.getElementById('prop-address').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.querySelector('.addr-link-btn[data-site="zillow"]').click();
+});
+
+// ── Project-type follow-up questions ──
+function syncTierClass() {
+  document.body.classList.remove('tier-A', 'tier-B', 'tier-C');
+  document.body.classList.add('tier-' + currentTier);
+}
+document.querySelectorAll('.tier-btn').forEach(btn => btn.addEventListener('click', syncTierClass));
+document.querySelectorAll('.seg-btn[data-stories]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    projectStories = parseInt(btn.dataset.stories, 10);
+    document.querySelectorAll('.seg-btn[data-stories]').forEach(b => b.classList.toggle('active', b === btn));
+    renderReno();
+  });
+});
+document.getElementById('addition-sqft').addEventListener('input', e => {
+  additionSqft = Math.max(0, parseFloat(e.target.value) || 0);
+  renderReno();
 });
 
 // compare toggle — click + touchend for iOS
@@ -3123,11 +3211,11 @@ function exportRenoReport() {
   const reportAddress = document.getElementById('prop-address')?.value.trim() || '';
 
   const presetLabel = isFull
-    ? 'Full Renovation'
+    ? 'Whole Home'
     : activeRooms.size > 0
       ? [...activeRooms].map(k => ({ kitchen:'Kitchen','master-bath':'Master Bath','guest-bath':'Guest Bath' }[k])).join(' + ')
         + (activeRooms.has('guest-bath') && guestBathCount > 1 ? ` (×${guestBathCount})` : '')
-      : 'Full Renovation';
+      : 'Whole Home';
 
   const fmt = v => '$' + Math.round(v).toLocaleString();
   const scopeLabel = s => s === 'reno' ? '½ Reno' : s === 'omit' ? 'Omitted' : 'Full';
@@ -3192,7 +3280,7 @@ function exportRenoReport() {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${isAdv ? `NANDCO Reno Report — Tier ${tier}` : `NANDCO Renovation Estimate — ${BASIC_OPTION_NAMES[tier]}`}</title>
+<title>${isAdv ? `NANDCO Reno Report — Tier ${tier}` : `NANDCO Renovation Estimate — ${projectTypeLabel()}`}</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root { --r-font-body: 'DM Sans', 'Segoe UI', Arial, sans-serif; --r-font-mono: 'DM Mono', 'Segoe UI', monospace; }
@@ -3271,12 +3359,12 @@ function exportRenoReport() {
     <div style="font-size:9px;letter-spacing:0.1em;">TIER</div>
     <span class="tier-letter">${tier}</span>
     ${tierNames[tier]}
-  </div>` : `<div class="tier-badge">${BASIC_OPTION_NAMES[tier]}</div>`}
+  </div>` : `<div class="tier-badge">${projectTypeLabel()}</div>`}
 </div>
 
 <div class="meta-grid">
   <div class="meta-item"><label>Scope</label><value>${presetLabel}</value></div>
-  <div class="meta-item"><label>Sq Footage</label><value>${sqft.toLocaleString()} sqft</value></div>
+  <div class="meta-item"><label>Sq Footage</label><value>${sqftLabel(sqft)}</value></div>
   <div class="meta-item"><label>Bedrooms</label><value>${beds} bed</value></div>
   <div class="meta-item"><label>Bathrooms</label><value>${baths} bath</value></div>
 </div>
