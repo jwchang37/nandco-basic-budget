@@ -686,6 +686,11 @@
   body.mode-basic .adv-only, body.mode-basic .adv-only-flex { display: none !important; }
   body.mode-advanced #basic-view-card { display: none; }
 
+  .addr-links { display: flex; gap: 6px; margin-top: 6px; }
+  .addr-link-btn { flex: 1; background: var(--surface2); color: var(--text2); border: 0.5px solid var(--border2); border-radius: 5px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 7px 4px; cursor: pointer; transition: all 0.15s; }
+  .addr-link-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .addr-hint { font-size: 10px; color: var(--text3); margin-top: 6px; line-height: 1.4; }
+
   /* reno summary card */
   .reno-totals {
     display: grid;
@@ -1106,26 +1111,6 @@
     </div>
   </div>
 
-  <div class="address-bar">
-    <div class="address-wrap">
-      <div class="address-input-wrap">
-        <svg class="address-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5s4.5-4.75 4.5-8.5C12.5 3.51 10.49 1.5 8 1.5zm0 6.25a1.75 1.75 0 110-3.5 1.75 1.75 0 010 3.5z" fill="currentColor"/>
-        </svg>
-        <input type="text" id="inp-address" placeholder="Enter property address (e.g. 1515 W 207th St, Torrance CA)" autocomplete="off">
-      </div>
-      <button id="btn-lookup">AI LOOKUP</button>
-      <button id="btn-apikey" title="Set Anthropic API Key" onclick="promptApiKey()" style="background:none;border:0.5px solid var(--border2);border-radius:6px;padding:0 10px;height:36px;cursor:pointer;font-family:var(--font-mono);font-size:9px;letter-spacing:0.06em;color:var(--text3);margin-left:4px;transition:border-color 0.15s,color 0.15s;">⚙ API KEY</button>
-    </div>
-    <div id="prop-pill">
-      <div class="pill-header">
-        <div class="pill-address" id="pill-addr">—</div>
-        <div class="pill-confidence" id="pill-conf">—</div>
-      </div>
-      <div class="pill-chips" id="pill-chips"></div>
-      <div class="pill-note" id="pill-note"></div>
-    </div>
-  </div>
   <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">
     <div class="toggle-track"><div class="toggle-thumb"></div></div>
     <span id="theme-label">LIGHT</span>
@@ -1156,6 +1141,15 @@
 
       <div>
         <div class="section-label">Property</div>
+        <div class="input-group">
+          <div class="input-label"><span>Address <span style="color:var(--text3);">(optional)</span></span></div>
+          <input type="text" id="prop-address" placeholder="e.g. 1515 W 207th St, Torrance CA" autocomplete="street-address">
+          <div class="addr-links">
+            <button type="button" class="addr-link-btn" data-site="zillow">Find on Zillow ↗</button>
+            <button type="button" class="addr-link-btn" data-site="google">Search Google ↗</button>
+          </div>
+          <div class="addr-hint">Opens a search in a new tab. Copy the square footage, bedrooms and bathrooms into the fields below.</div>
+        </div>
         <div class="input-group">
           <div class="input-label">
             <span>Square footage</span>
@@ -1605,284 +1599,6 @@ function setSlider(slId, val) {
   const sl=$(slId); if(sl) sl.value=val;
 }
 
-async function lookupAddress() {
-  const address = $('inp-address').value.trim();
-  if (!address) return;
-
-  const btn = $('btn-lookup');
-  const pill = $('prop-pill');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>ANALYZING';
-
-  pill.classList.remove('visible');
-
-  const prompt = `You are a real estate data assistant with access to web search. Follow these steps:
-1. Search for the property address with the term "list price" — e.g. "4964 S Centinela Ave Los Angeles CA 90066 list price"
-2. If no clear price appears, do a second search adding "Zillow" or "Realtor.com" to the address
-3. Look carefully at the search result snippets for an explicit dollar amount near words like "Listed at", "List price", "For sale", "$" — the price typically appears as $XXX,XXX in the snippet title or description
-4. Cross-reference multiple sources (Redfin, Zillow, Realtor.com) — if they show different prices, prefer the most recent listing
-For purchase price: use the exact dollar amount that appears in search result text. If multiple prices appear (e.g. original list vs. current price), use the current/most recent one. Be precise — if you see $995,000 in a snippet, return 995000, not a rounded estimate.
-
-Address: "${address}"
-
-Return ONLY a valid JSON object with these exact fields:
-{
-  "address_normalized": "full normalized address string including city, 2-letter state abbreviation, and 5-digit ZIP (e.g. 1515 W 207th St, Torrance, CA 90501)",
-  "zip": "5-digit ZIP code as a string",
-  "property_type": "single family" | "duplex" | "triplex" | "quadplex" | "multifamily" | "condo" | "townhouse" | "commercial" | "unknown",
-  "units": <integer number of residential units>,
-  "beds_per_unit": <integer bedrooms per unit, or average if mixed>,
-  "baths_per_unit": <number bathrooms per unit, use 0.5 increments>,
-  "est_purchase_price": <integer best estimate of current list price or recent sale price for this specific property in dollars — use known sale history, active listings, or recent comps for this address>,
-  "est_rent_per_unit": <integer estimated monthly market rent per unit in dollars>,
-  "year_built": <integer or null>,
-  "sqft_per_unit": <integer or null>,
-  "confidence": "high" | "medium" | "low",
-  "notes": "brief 1-2 sentence note about what you know about this property or why confidence is low"
-}
-
-Important: Return ONLY the JSON, no markdown, no explanation, no code fences.`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        ...(localStorage.getItem('tbtq-api-key') ? { 'x-api-key': localStorage.getItem('tbtq-api-key') } : {})
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 4000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    const data = await response.json();
-    console.log('[NANDCO Lookup] Full API response:', JSON.stringify(data, null, 2));
-
-    // Surface API errors
-    if (data.type === 'error' || data.error) {
-      const errMsg = data.error?.message || JSON.stringify(data.error || data);
-      throw new Error('API error: ' + errMsg);
-    }
-
-    // Extract final text block — comes after any tool_use/tool_result blocks
-    const raw = (data.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-    console.log('[NANDCO Lookup] Raw text extracted:', raw);
-
-    let parsed;
-    try {
-      const clean = raw.replace(/```json|```/g,'').trim();
-      // Find JSON object in response (in case Claude adds commentary)
-      const jsonMatch = clean.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found');
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch(e) {
-      throw new Error('Could not parse property data from AI response.');
-    }
-
-    // Apply values to form
-    if (parsed.units)           { setSlider('sl-units', Math.min(20, Math.max(1, parsed.units))); }
-    if (parsed.beds_per_unit)   { setSlider('sl-beds',  Math.min(6, Math.max(0, parsed.beds_per_unit))); }
-    if (parsed.baths_per_unit)  { setSlider('sl-baths', Math.min(4, Math.max(1, parsed.baths_per_unit))); }
-
-    // Sync reno budget inputs from lookup
-    if (parsed.sqft_per_unit) {
-      const renoSqft = document.getElementById('reno-inp-sqft');
-      const renoSqftSl = document.getElementById('reno-sl-sqft');
-      const sqft = Math.min(20000, Math.max(500, parsed.sqft_per_unit));
-      if (renoSqft) renoSqft.value = sqft;
-      if (renoSqftSl) renoSqftSl.value = Math.min(6000, sqft);
-      document.getElementById('reno-lv-sqft').textContent = sqft.toLocaleString();
-    }
-    if (parsed.beds_per_unit) {
-      const renoBeds = document.getElementById('reno-inp-beds');
-      if (renoBeds) renoBeds.value = Math.min(10, Math.max(1, Math.round(parsed.beds_per_unit)));
-    }
-    if (parsed.baths_per_unit) {
-      const renoBaths = document.getElementById('reno-inp-baths');
-      if (renoBaths) renoBaths.value = Math.min(8, Math.max(1, Math.round(parsed.baths_per_unit)));
-    }
-    renderReno(); // Recalculate reno pricing with the newly-synced sqft/beds/baths
-    // Build pill
-    $('pill-addr').textContent = parsed.address_normalized || address;
-
-    // Auto-fill zip from address if parseable
-    // Use parsed.zip first (explicit field), then regex fallback on address string
-    const addrStr = parsed.address_normalized || address;
-    const zipFromField = (parsed.zip || '').toString().match(/^\d{5}$/) ? parsed.zip : null;
-    const zipFromRegex = addrStr.match(/\b[A-Z]{2}\s+(\d{5})\b/);
-    const zipFallback  = addrStr.match(/(\d{5})(?!\d)(?=[^\d]*$)/);
-    const detectedZip  = zipFromField || (zipFromRegex && zipFromRegex[1]) || (zipFallback && zipFallback[1]) || null;
-    if (detectedZip) {
-      lastLookedUpZip = detectedZip;
-      if ($('inp-zip')) $('inp-zip').value = detectedZip;
-    }
-    const conf = (parsed.confidence || 'none').toLowerCase();
-    const confEl = $('pill-conf');
-    confEl.className = 'pill-confidence conf-' + (['high','medium','low'].includes(conf) ? conf : 'none');
-    const confDot = {high:'●',medium:'●',low:'●'}[conf] || '○';
-    confEl.textContent = confDot + ' ' + (conf === 'none' ? 'UNKNOWN' : conf.toUpperCase()) + ' CONFIDENCE';
-
-    const chips = [];
-    chips.push(`${parsed.units || '?'} unit${(parsed.units||1)>1?'s':''}`);
-    chips.push(`${parsed.beds_per_unit||'?'}bd / ${parsed.baths_per_unit||'?'}ba`);
-    chips.push(parsed.property_type || 'unknown type');
-    if (parsed.year_built) chips.push(`built ${parsed.year_built}`);
-    if (parsed.sqft_per_unit) chips.push(`${parsed.sqft_per_unit.toLocaleString()} sqft/unit`);
-
-    $('pill-chips').innerHTML = chips.map(c=>`<span class="pill-chip">${c}</span>`).join('');
-    $('pill-note').textContent = parsed.notes || '';
-
-    pill.classList.add('visible');
-    updateUI();
-    paUpdateUI();
-
-    // Fire rent estimate in parallel now that zip is set
-    if (lastLookedUpZip) estimateRent(true);
-
-  } catch(err) {
-    console.error('[NANDCO Lookup] Error:', err);
-    $('pill-addr').textContent = 'Lookup failed';
-    const confEl = $('pill-conf');
-    confEl.className = 'pill-confidence conf-low';
-    confEl.textContent = '● ERROR';
-    $('pill-chips').innerHTML = '';
-    $('pill-note').textContent = (err.message || 'Something went wrong.') + ' (Check console for details.)';
-    pill.classList.add('visible');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'AI LOOKUP';
-  }
-}
-
-/* ══════════════════════════════════════════
-   RENT ESTIMATOR — Claude API
-══════════════════════════════════════════ */
-let lastRentEstimate = null;
-let lastLookedUpZip = null;
-
-async function estimateRent(autoApply = false) {
-  if (!$('inp-zip')) return; // Cash Flow tab removed in client branch
-  const zip   = ($('inp-zip').value || '').trim() || (lastLookedUpZip || '');
-  if ($('inp-zip') && !$('inp-zip').value && zip) $('inp-zip').value = zip;
-  const beds  = getVal('sl-beds');
-  const baths = getVal('sl-baths');
-  const units = getVal('sl-units');
-
-  if (!zip || zip.length < 5) {
-    alert('Please enter a 5-digit ZIP code.');
-    return;
-  }
-
-  const btn = $('btn-rent-est');
-  const resultBox = $('rent-est-result');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>ANALYZING';
-  resultBox.classList.remove('visible');
-
-  const prompt = `You are a real estate market analyst with deep knowledge of US rental markets.
-
-Estimate the current monthly market rent for a residential unit with the following characteristics:
-- ZIP code: ${zip}
-- Bedrooms: ${beds}
-- Bathrooms: ${baths}
-- Part of a ${units}-unit multifamily building
-
-Return ONLY a valid JSON object with these exact fields, no markdown, no explanation:
-{
-  "zip": "${zip}",
-  "city_state": "City, ST (neighborhood if relevant)",
-  "beds": ${beds},
-  "baths": ${baths},
-  "rent_low": <integer, conservative market rent in dollars/month>,
-  "rent_mid": <integer, median market rent estimate in dollars/month>,
-  "rent_high": <integer, optimistic market rent in dollars/month>,
-  "confidence": "high" | "medium" | "low",
-  "market_notes": "1-2 sentences on local rental market conditions, vacancy trends, or notable factors affecting rent in this zip"
-}`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        ...(localStorage.getItem('tbtq-api-key') ? { 'x-api-key': localStorage.getItem('tbtq-api-key') } : {})
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    const data = await response.json();
-    console.log('[NANDCO Rent Est] Full API response:', JSON.stringify(data, null, 2));
-
-    if (data.type === 'error' || data.error) {
-      const errMsg = data.error?.message || JSON.stringify(data.error || data);
-      throw new Error('API error: ' + errMsg);
-    }
-
-    const raw = data.content?.find(b => b.type === 'text')?.text || '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    lastRentEstimate = parsed.rent_mid;
-
-    // Auto-apply when triggered from AI Lookup
-    if (autoApply && lastRentEstimate) {
-      setSliderAndInput('sl-rent', 'inp-rent', lastRentEstimate);
-      updateUI();
-    }
-
-    $('rent-est-point').textContent = '$' + parsed.rent_mid.toLocaleString() + '/mo';
-    $('rent-est-range').textContent = '$' + parsed.rent_low.toLocaleString() + ' – $' + parsed.rent_high.toLocaleString();
-
-    const confColors = { high: '#6ecf94', medium: '#e09a55', low: '#e07070' };
-    const confColor = confColors[parsed.confidence] || 'var(--text3)';
-    $('rent-est-point').style.color = confColor;
-
-    $('rent-est-label').innerHTML =
-      `<span style="color:${confColor};font-weight:500;">${(parsed.confidence||'').toUpperCase()} CONFIDENCE</span>` +
-      ` · ${parsed.city_state || zip}<br><span style="color:var(--text3);margin-top:3px;display:block;">${parsed.market_notes || ''}</span>`;
-
-    resultBox.classList.add('visible');
-
-  } catch(err) {
-    $('rent-est-point').textContent = 'Error';
-    $('rent-est-range').textContent = '';
-    $('rent-est-label').textContent = err.message || 'Could not estimate rent. Try again.';
-    resultBox.classList.add('visible');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '&#9673; AI RENT EST.';
-  }
-}
-
-function applyRentEstimate() {
-  if (!lastRentEstimate) return;
-  setSliderAndInput('sl-rent', 'inp-rent', lastRentEstimate);
-  updateUI();
-}
-
-$('btn-rent-est')?.addEventListener('click', estimateRent);
-$('rent-est-apply')?.addEventListener('click', applyRentEstimate);
-$('inp-zip')?.addEventListener('keydown', e => { if (e.key === 'Enter') estimateRent(); });
-
-// Auto-populate zip from address lookup
-const _origLookup = lookupAddress;
-
-$('btn-lookup').addEventListener('click', lookupAddress);
-$('inp-address').addEventListener('keydown', e => { if(e.key==='Enter') lookupAddress(); });
 
 /* ── INIT ── */
 updateUI();
@@ -2698,6 +2414,23 @@ document.querySelectorAll('.view-mode-btn').forEach(btn => {
   btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
 });
 
+// ── Free address search links (no API key) ──
+// Opens a Zillow or Google search for the typed address; the customer copies sqft/beds/baths in.
+document.querySelectorAll('.addr-link-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const addrInp = document.getElementById('prop-address');
+    const addr = addrInp.value.trim();
+    if (!addr) { addrInp.focus(); return; }
+    const url = btn.dataset.site === 'zillow'
+      ? 'https://www.zillow.com/homes/' + encodeURIComponent(addr) + '_rb/'
+      : 'https://www.google.com/search?q=' + encodeURIComponent(addr + ' beds baths sqft');
+    window.open(url, '_blank', 'noopener');
+  });
+});
+document.getElementById('prop-address').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.querySelector('.addr-link-btn[data-site="zillow"]').click();
+});
+
 // compare toggle — click + touchend for iOS
 ;(function() {
   const tog = document.getElementById('compare-showall-toggle');
@@ -3293,27 +3026,6 @@ document.getElementById('pa-btn-use-rec')?.addEventListener('click',()=>{
 });
 
 
-// ── API Key management ──
-function promptApiKey() {
-  const current = localStorage.getItem('tbtq-api-key') || '';
-  const key = prompt('Enter your Anthropic API key (stored locally in browser only):\n\nGet one at: console.anthropic.com', current ? '••••••••' + current.slice(-4) : '');
-  if (key === null) return; // cancelled
-  if (key === '' ) { localStorage.removeItem('tbtq-api-key'); updateApiKeyBtn(); return; }
-  if (key.startsWith('sk-')) { localStorage.setItem('tbtq-api-key', key); }
-  else if (!key.startsWith('••')) { alert('Invalid key — must start with sk-'); return; }
-  updateApiKeyBtn();
-}
-
-function updateApiKeyBtn() {
-  const btn = document.getElementById('btn-apikey');
-  if (!btn) return;
-  const hasKey = !!localStorage.getItem('tbtq-api-key');
-  btn.style.borderColor = hasKey ? 'var(--accent2)' : 'var(--border2)';
-  btn.style.color = hasKey ? 'var(--accent2)' : 'var(--text3)';
-  btn.title = hasKey ? 'API key set — click to change' : 'Set Anthropic API Key';
-}
-
-document.addEventListener('DOMContentLoaded', updateApiKeyBtn);
 
 // ── Admin: cost multiplier (password protected) ──
 function openAdminModal() {
@@ -3397,8 +3109,7 @@ function exportRenoReport() {
   const tierColors = { A: '#a08840', B: '#5e8a43', C: '#c0392b' };
   const tierColor = tierColors[tier];
 
-  const normalizedAddr = document.getElementById('pill-addr')?.textContent?.trim();
-  const reportAddress = (normalizedAddr && normalizedAddr !== '—') ? normalizedAddr : '';
+  const reportAddress = document.getElementById('prop-address')?.value.trim() || '';
 
   const presetLabel = isFull
     ? 'Full Renovation'
@@ -3596,7 +3307,7 @@ ${catSections}` : `<div class="totals-summary">
 </body></html>`;
 
   // Build filename from address if available
-  const rawAddr = document.getElementById('inp-address').value.trim();
+  const rawAddr = document.getElementById('prop-address')?.value.trim() || '';
   const fileBase = rawAddr
     ? 'NANDCO_Estimate_' + rawAddr.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')
     : 'NANDCO_Renovation_Estimate';
