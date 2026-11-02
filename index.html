@@ -946,7 +946,8 @@
   }
   .compare-table td:first-child { text-align: left; color: var(--text2); font-size: 11px; font-family: var(--font-body); }
   .compare-table tr:last-child td { border-bottom: none; font-weight: 600; color: var(--text); font-size: 12px; border-top: 0.5px solid var(--border2); }
-  .compare-table tr.cmp-subtotal td { font-weight: 600; color: var(--text); border-top: 0.5px solid var(--border2); }
+  .compare-table tr.cmp-subtotal td { font-weight: 600; color: var(--text); }
+  .compare-table tr.cmp-head th { padding-top: 14px; border-top: 0.5px solid var(--border2); }
   .compare-table tr.cmp-gcfee td { color: var(--text2); }
   .compare-table tr.cmp-total td { font-size: 13px; }
   .compare-table .col-a { color: var(--accent); }
@@ -1327,9 +1328,9 @@
             <tr>
               <th>Category</th>
               <th style="text-align:center;color:var(--text3);">Scope</th>
-              <th class="col-a">A — Premium</th>
-              <th class="col-b">B — Standard</th>
-              <th class="col-c">C — Budget</th>
+              <th class="col-a">New Construction</th>
+              <th class="col-b">Renovation</th>
+              <th class="col-c">Remodel</th>
             </tr>
           </thead>
           <tbody id="compare-body"></tbody>
@@ -2236,6 +2237,11 @@ function renderReno() {
     <td class="col-a" ${totalAStyle}>${fmtReno(f(totalAVal))}</td>
     <td class="col-b">${fmtReno(f(totalB))}</td>
     <td class="col-c">${fmtReno(f(totalC))}</td></tr>`;
+  // Repeat the column headers above the totals so they're visible after scrolling
+  rows += `<tr class="cmp-head"><th></th><th></th>
+    <th class="col-a">${BASIC_OPTION_NAMES.A}</th>
+    <th class="col-b">${BASIC_OPTION_NAMES.B}</th>
+    <th class="col-c">${BASIC_OPTION_NAMES.C}</th></tr>`;
   rows += sumRow('cmp-subtotal', 'SUBTOTAL', v => v);
   rows += sumRow('cmp-gcfee', `NANDCO GC FEE (${nandcoFeePct}%)`, v => v * feeMult);
   rows += sumRow('cmp-total', 'TOTAL', v => v * (1 + feeMult));
@@ -2450,17 +2456,16 @@ let compareShowAll = false; // basic view starts single-column; advanced turns t
 function updateCompareTierVisibility() {
   const table = document.getElementById('compare-table');
   if (!table) return;
-  const tierLabels = { A: 'A — Premium', B: 'B — Standard', C: 'C — Budget' };
+  const tierLabels = BASIC_OPTION_NAMES;
   const tierColors = { A: '', B: 'var(--accent2)', C: 'var(--danger-light)' };
-  const thead = table.querySelector('thead tr');
-  const thA = thead ? thead.querySelector('.col-a') : null;
-  if (viewMode === 'basic') tierLabels[currentTier] = BASIC_OPTION_NAMES[currentTier];
+  // First price column header, in the top header and the repeated header above the totals
+  const thAs = table.querySelectorAll('thead .col-a, tr.cmp-head .col-a');
   if (compareShowAll) {
     table.classList.remove('single-tier');
-    if (thA) { thA.textContent = 'A — Premium'; thA.style.color = ''; }
+    thAs.forEach(th => { th.textContent = tierLabels.A; th.style.color = ''; });
   } else {
     table.classList.add('single-tier');
-    if (thA) { thA.textContent = tierLabels[currentTier]; thA.style.color = tierColors[currentTier]; }
+    thAs.forEach(th => { th.textContent = tierLabels[currentTier]; th.style.color = tierColors[currentTier]; });
   }
   // Update toggle UI
   const tog = document.getElementById('compare-showall-toggle');
