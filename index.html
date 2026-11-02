@@ -939,6 +939,9 @@
   }
   .compare-table td:first-child { text-align: left; color: var(--text2); font-size: 11px; font-family: var(--font-body); }
   .compare-table tr:last-child td { border-bottom: none; font-weight: 600; color: var(--text); font-size: 12px; border-top: 0.5px solid var(--border2); }
+  .compare-table tr.cmp-subtotal td { font-weight: 600; color: var(--text); border-top: 0.5px solid var(--border2); }
+  .compare-table tr.cmp-gcfee td { color: var(--text2); }
+  .compare-table tr.cmp-total td { font-size: 13px; }
   .compare-table .col-a { color: var(--accent); }
   .compare-table .col-b { color: var(--accent2); }
   .compare-table .col-c { color: #e07070; }
@@ -2092,6 +2095,9 @@ function renderReno() {
   const baths = parseInt(document.getElementById('reno-inp-baths').value)  || 2;
   const tier  = currentTier;
   const data  = renoData(sqft, beds, baths);
+  // Register categories before totalling: scopeMultiplier() treats an unregistered
+  // category as disabled, which undercounted the very first render.
+  initCatEnabled(data);
 
   let laborTotal = 0, materialTotal = 0;
   data.forEach(cat => {
@@ -2160,10 +2166,15 @@ function renderReno() {
   });
   const totalAVal = compareShowAll ? totalA : (tier==='A'?totalA:tier==='B'?totalB:totalC);
   const totalAStyle = compareShowAll ? '' : `style="color:${({A:'',B:'var(--accent2)',C:'var(--danger-light)'})[tier]}"`;
-  rows += `<tr><td>TOTAL</td><td></td>
-    <td class="col-a" ${totalAStyle}>${fmtReno(totalAVal)}</td>
-    <td class="col-b">${fmtReno(totalB)}</td>
-    <td class="col-c">${fmtReno(totalC)}</td></tr>`;
+  // Subtotal → GC fee → total, so the last row matches the headline project cost
+  const feeMult = nandcoFeePct / 100;
+  const sumRow = (cls, label, f) => `<tr class="${cls}"><td>${label}</td><td></td>
+    <td class="col-a" ${totalAStyle}>${fmtReno(f(totalAVal))}</td>
+    <td class="col-b">${fmtReno(f(totalB))}</td>
+    <td class="col-c">${fmtReno(f(totalC))}</td></tr>`;
+  rows += sumRow('cmp-subtotal', 'SUBTOTAL', v => v);
+  rows += sumRow('cmp-gcfee', `NANDCO GC FEE (${nandcoFeePct}%)`, v => v * feeMult);
+  rows += sumRow('cmp-total', 'TOTAL', v => v * (1 + feeMult));
   tbody.innerHTML = rows;
 
   // On/Off pill listeners
@@ -3294,7 +3305,20 @@ ${catSections}` : `<div class="totals-summary">
     <div class="totals-val">${fmt(projectTotal)}</div>
   </div>
 </div>
-<div style="font-size:11px;color:#5c5a53;line-height:1.5;">All-in estimate covering labor and materials, with NANDCO's ${nandcoFeePct}% GC fee included. Final pricing depends on site conditions and the selections you make.</div>`}
+<div style="font-size:11px;color:#5c5a53;line-height:1.5;margin-bottom:24px;">All-in estimate covering labor and materials, with NANDCO's ${nandcoFeePct}% GC fee included. Final pricing depends on site conditions and the selections you make.</div>
+
+<div class="totals-summary">
+  <div class="totals-row">
+    <div class="totals-label">Line items (below)</div>
+    <div class="totals-val">${fmt(grandTotal)}</div>
+  </div>
+  <div class="totals-row">
+    <div class="totals-label">NANDCO GC Fee (${nandcoFeePct}%)</div>
+    <div class="totals-val">${fmt(gcFee)}</div>
+  </div>
+</div>
+
+${catSections}`}
 
 <div class="report-footer">
   <div class="note">
