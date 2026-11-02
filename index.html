@@ -2092,6 +2092,9 @@ function renderReno() {
   const baths = parseInt(document.getElementById('reno-inp-baths').value)  || 2;
   const tier  = currentTier;
   const data  = renoData(sqft, beds, baths);
+  // Register categories before totalling: scopeMultiplier() treats an unregistered
+  // category as disabled, which undercounted the very first render.
+  initCatEnabled(data);
 
   let laborTotal = 0, materialTotal = 0;
   data.forEach(cat => {
@@ -3294,7 +3297,20 @@ ${catSections}` : `<div class="totals-summary">
     <div class="totals-val">${fmt(projectTotal)}</div>
   </div>
 </div>
-<div style="font-size:11px;color:#5c5a53;line-height:1.5;">All-in estimate covering labor and materials, with NANDCO's ${nandcoFeePct}% GC fee included. Final pricing depends on site conditions and the selections you make.</div>`}
+<div style="font-size:11px;color:#5c5a53;line-height:1.5;margin-bottom:24px;">All-in estimate covering labor and materials, with NANDCO's ${nandcoFeePct}% GC fee included. Final pricing depends on site conditions and the selections you make.</div>
+
+<div class="totals-summary">
+  <div class="totals-row">
+    <div class="totals-label">Line items (below)</div>
+    <div class="totals-val">${fmt(grandTotal)}</div>
+  </div>
+  <div class="totals-row">
+    <div class="totals-label">NANDCO GC Fee (${nandcoFeePct}%)</div>
+    <div class="totals-val">${fmt(gcFee)}</div>
+  </div>
+</div>
+
+${catSections}`}
 
 <div class="report-footer">
   <div class="note">
